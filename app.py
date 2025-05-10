@@ -1,3 +1,5 @@
+# Versión final garantizando visibilidad constante de los botones
+codigo_final_corregido = '''
 import streamlit as st
 import random
 import os
@@ -48,7 +50,7 @@ def cargar_texto_libros():
         if f.endswith(".txt"):
             with open(os.path.join(LIBROS_TXT_DIR, f), "r", encoding="utf-8") as file:
                 textos.append(file.read())
-    return "\n\n".join(textos[:3])
+    return "\\n\\n".join(textos[:3])
 
 def interpretar_hexagrama(texto_hex, texto_libros, info_hexagrama):
     prompt = f"""
@@ -76,20 +78,20 @@ INTERPRETACIÓN:
 st.set_page_config(page_title="I Ching IA", layout="centered")
 st.title("🔮 I Ching IA - Interpretación de Hexagramas")
 
-st.markdown("### Elige una opción para generar tu hexagrama:")
-
-modo = st.radio("Modo de tirada", ["Tirada Automática", "Tirada Manual"])
-
+# Inicializar estados
 if "manual_lineas" not in st.session_state:
     st.session_state.manual_lineas = []
 if "lineas_activas" not in st.session_state:
     st.session_state.lineas_activas = []
 
+# Selección de modo
+modo = st.radio("Elige el modo de tirada:", ["Tirada Automática", "Tirada Manual"])
+
 lineas = []
 
+# Mostrar botones siempre
 if modo == "Tirada Automática":
     if st.button("🎲 Realizar tirada automática"):
-        st.session_state.manual_lineas = []
         lineas = [lanzar_linea() for _ in range(6)]
         st.session_state.lineas_activas = lineas
     else:
@@ -108,12 +110,14 @@ elif modo == "Tirada Manual":
     lineas = st.session_state.manual_lineas
     st.session_state.lineas_activas = lineas
 
-# Mostrar líneas e interpretar
-if len(lineas) == 6:
+# Mostrar líneas si existen
+if len(lineas) > 0:
     st.markdown("### Líneas del hexagrama (de abajo hacia arriba):")
     for idx, (simbolo, mutante) in enumerate(lineas[::-1]):
         st.write(f"Línea {6-idx}: {simbolo} {'(mutante)' if mutante else ''}")
 
+# Interpretar si hay 6 líneas
+if len(lineas) == 6:
     num_hex = obtener_hexagrama_por_lineas(lineas)
     info = HEXAGRAMAS_INFO.get(num_hex, {"Nombre": "Desconocido", "Caracter": "?", "Pinyin": "?"})
     st.markdown(f"## 🔵 Hexagrama {num_hex}: {info['Nombre']} ({info['Caracter']} – {info['Pinyin']})")
@@ -130,3 +134,11 @@ if len(lineas) == 6:
 
     st.markdown("### 🧾 Interpretación")
     st.write(interpretacion)
+'''
+
+# Guardar versión final corregida garantizada
+ruta_final_bien = "/mnt/data/app_iching_OK_final.py"
+with open(ruta_final_bien, "w", encoding="utf-8") as f:
+    f.write(codigo_final_corregido.strip())
+
+ruta_final_bien
