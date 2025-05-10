@@ -72,6 +72,35 @@ INTERPRETACIÓN:
 # Streamlit UI
 st.title("🔮 I Ching IA - Interpretación de Hexagramas")
 
+st.markdown("### Elige una opción para generar tu hexagrama:")
+modo = st.radio("Modo de tirada", ["Tirada Automática", "Tirada Manual"], key="modo_tirada")
+lineas = []
+
+if "manual_lineas" not in st.session_state:
+    st.session_state.manual_lineas = []
+
+if modo == "Tirada Automática":
+    if st.button("🎲 Realizar tirada automática"):
+        st.session_state.manual_lineas = []
+        lineas = [lanzar_linea() for _ in range(6)]
+        st.session_state.lineas_activas = lineas
+    elif "lineas_activas" in st.session_state:
+        lineas = st.session_state.lineas_activas
+
+elif modo == "Tirada Manual":
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("➕ Lanzar línea"):
+            if len(st.session_state.manual_lineas) < 6:
+                st.session_state.manual_lineas.append(lanzar_linea())
+    with col2:
+        if st.button("🔁 Reiniciar"):
+            st.session_state.manual_lineas = []
+            st.session_state.lineas_activas = []
+
+    lineas = st.session_state.manual_lineas
+    st.session_state.lineas_activas = lineas
+
 st.markdown("Elige una opción para generar tu hexagrama:")
 
 modo = st.radio("Modo de tirada", ["Tirada Automática", "Tirada Manual"])
