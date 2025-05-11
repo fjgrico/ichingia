@@ -23,7 +23,7 @@ HEXAGRAMAS_TXT_DIR = BASE_DIR / "hexagramas_txt"
 LIBROS_TXT_DIR     = BASE_DIR / "libros_txt"
 IMG_DIR            = BASE_DIR / "img_hexagramas"
 
-# ——— Mensaje de bienvenida y explicación ———
+# ——— Mensaje de bienvenida ———
 st.title("🔮 I Ching IA - Consulta al Oráculo")
 st.markdown("""
 Bienvenido a **IChingIA**.  
@@ -32,10 +32,10 @@ _Hazlo sólo si quieres enfocar tu tirada en algo concreto._
 Si prefieres, puedes **dejar el campo vacío** y realizar directamente la tirada.
 """)
 
-# ——— Entrada de pregunta (texto opcional) ———
+# ——— Entrada de pregunta opcional ———
 pregunta = st.text_input("Escribe tu pregunta (opcional):")
 
-# ——— Lógica de tirada de líneas con monedas ———
+# ——— Simular lanzamiento de monedas clásico ———
 def lanzar_linea():
     monedas = [random.choice([2, 3]) for _ in range(3)]
     valor   = sum(monedas)
@@ -44,57 +44,79 @@ def lanzar_linea():
     return simbolo, mutante, valor, monedas
 
 def obtener_hexagrama_por_lineas(lineas):
-    binario = "".join("1" if s == "⚊" else "0" for s, *_ in lineas)
-    return int(binario, 2) + 1
+    binario = "".join("1" if s=="⚊" else "0" for s, *_ in lineas)
+    return int(binario,2) + 1
 
 def obtener_hexagrama_mutado(lineas):
     mutadas = []
     for s, mut, *_ in lineas:
-        nuevo = "⚋" if (s=="⚊" and mut) else ("⚊" if (s=="⚋" and mut) else s)
+        if mut:
+            nuevo = "⚋" if s=="⚊" else "⚊"
+        else:
+            nuevo = s
         mutadas.append((nuevo, False, None, None))
     return obtener_hexagrama_por_lineas(mutadas)
 
 # ——— Carga de textos ———
 def cargar_texto_hexagrama(num):
     for fname in os.listdir(HEXAGRAMAS_TXT_DIR):
-        lower = fname.lower()
-        if lower.startswith(f"{num:02}") or lower.startswith(f"hexagrama_{num}"):
+        if fname.lower().startswith(f"{num:02}") or fname.lower().startswith(f"hexagrama_{num}"):
             return (HEXAGRAMAS_TXT_DIR / fname).read_text(encoding="utf-8")
     return "Texto no disponible."
 
 def cargar_texto_libros():
-    textos = []
-    for fname in os.listdir(LIBROS_TXT_DIR):
+    for fname in sorted(os.listdir(LIBROS_TXT_DIR)):
         if fname.lower().endswith(".txt"):
-            textos.append((LIBROS_TXT_DIR / fname).read_text(encoding="utf-8"))
-    return "\n\n".join(textos[:3])
+            return (LIBROS_TXT_DIR / fname).read_text(encoding="utf-8")
+    return ""
 
 # ——— Iconos visuales ———
 def iconos_linea(simbolo):
-    return "⚫ ⚫ ⚫" if simbolo == "⚊" else "⚫ ⚪ ⚫"
+    return "⚫ ⚫ ⚫" if simbolo=="⚊" else "⚫ ⚪ ⚫"
 
-# ——— Interpretación con GPT ———
-def interpretar_hexagrama(texto_hex, texto_libros, info_hex, pregunta_usuario):
-    prompt = f"""
-Actúa como un sabio experto en I Ching y desarrollo personal. Si el usuario ha formulado una pregunta, incorpórala en tu interpretación; si no, ofrece una lectura general.
+# ——— Llamada de resumen ———
+def resumir_texto(texto, etiqueta):
+    prompt = f"Por favor, resume brevemente (300–400 tokens) el siguiente texto del {etiqueta} para su posterior interpretación:\n\n\"\"\"\n{texto}\n\"\"\"\nResumen:"
+    try:
+        resp = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role":"user","content":prompt}],
+            temperature=0.5,
+            max_tokens=400
+        )
+        return resp.choices[0].message.content
+    except OpenAIError as e:
+        st.error(f"🚨 Error al resumir {etiqueta}: {e}")
+        st.stop()
 
-PREGUNTA: {pregunta_usuario or '[Sin pregunta específica]'}
+# ——— Interpretación final ———
+def interpretar_hexagrama(res_hex, res_lib, info_hex, pregunta_usuario):
+    if pregunta_usuario:
+        intro = f'Aquí tienes la interpretación del oráculo I Ching a tu pregunta: "{pregunta_usuario}"\n\n'
+    else:
+        intro = ""
+    prompt = f"""{intro}
 HEXAGRAMA: {info_hex['Nombre']} ({info_hex['Pinyin']} – {info_hex['Caracter']})
 
-TEXTO BASE:
-{texto_hex}
+RESUMEN DEL HEXAGRAMA:
+{res_hex}
 
-BASE ADICIONAL:
-{texto_libros}
+RESUMEN DEL TEXTO CLÁSICO:
+{res_lib}
 
-INTERPRETACIÓN:
-"""
+Interpreta estos resúmenes desde los enfoques:
+- Espiritual (Taoísta, Budista...)
+- Emocional / Relacional
+- Profesional / Decisiones
+- Salud / Bienestar
+
+INTERPRETACIÓN:"""
     try:
         resp = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[{"role":"user","content":prompt}],
             temperature=0.7,
-            max_tokens=1200
+            max_tokens=800
         )
         return resp.choices[0].message.content
     except AuthenticationError:
@@ -115,14 +137,13 @@ st.markdown("---")
 modo = st.selectbox("Elige modo de tirada:", ["Automática", "Manual"], key="modo")
 lineas = []
 
-if modo == "Automática":
+if modo=="Automática":
     if st.button("🎲 Realizar tirada"):
         lineas = [lanzar_linea() for _ in range(6)]
         st.session_state.lineas_activas = lineas
     else:
         lineas = st.session_state.lineas_activas
-
-else:  # Manual
+else:
     col1, col2 = st.columns(2)
     with col1:
         if st.button("➕ Lanzar línea"):
@@ -135,7 +156,7 @@ else:  # Manual
     lineas = st.session_state.manual_lineas
     st.session_state.lineas_activas = lineas
 
-# ——— Mostrar líneas con detalles ———
+# ——— Mostrar líneas ———
 if lineas:
     st.markdown("### Líneas (de abajo hacia arriba):")
     for i, (simb, mut, valor, monedas) in enumerate(lineas[::-1]):
@@ -144,25 +165,29 @@ if lineas:
         mut_text = " (mutante)" if mut else ""
         st.write(f"**Línea {num}:** {simb}  Valor={valor}  Monedas={monedas}  {iconos}{mut_text}")
 
-# ——— Mostrar hexagramas e interpretación ———
-if len(lineas) == 6:
+# ——— Al tener 6 líneas, procedemos ———
+if len(lineas)==6:
     num_hex = obtener_hexagrama_por_lineas(lineas)
     info    = HEXAGRAMAS_INFO.get(num_hex, {"Nombre":"Desconocido","Caracter":"?","Pinyin":"?"})
     st.markdown(f"## 🔵 Hexagrama {num_hex}: {info['Nombre']} ({info['Caracter']} – {info['Pinyin']})")
-    st.image(str(IMG_DIR / f"{num_hex:02d}.png"), width=150)
+    st.image(str(IMG_DIR/f"{num_hex:02d}.png"), width=150)
 
-    if any(mut for _, mut, *_ in lineas):
+    if any(mut for _,mut,*_ in lineas):
         num_mut = obtener_hexagrama_mutado(lineas)
         info_m  = HEXAGRAMAS_INFO.get(num_mut, {"Nombre":"Desconocido","Caracter":"?","Pinyin":"?"})
         st.markdown(f"## 🟠 Hexagrama Mutado {num_mut}: {info_m['Nombre']} ({info_m['Caracter']} – {info_m['Pinyin']})")
-        st.image(str(IMG_DIR / f"{num_mut:02d}.png"), width=150)
+        st.image(str(IMG_DIR/f"{num_mut:02d}.png"), width=150)
 
-    with st.spinner("🧠 Interpretando con GPT..."):
+    # ── Resumir ──
+    with st.spinner("📝 Resumiendo textos..."):
         txt_hex = cargar_texto_hexagrama(num_hex)
         txt_lib = cargar_texto_libros()
-        resultado = interpretar_hexagrama(txt_hex, txt_lib, info, pregunta)
+        resumen_hex = resumir_texto(txt_hex, "hexagrama")
+        resumen_lib = resumir_texto(txt_lib, "texto clásico")
+
+    # ── Interpretar ──
+    with st.spinner("🧠 Interpretando oráculo..."):
+        resultado = interpretar_hexagrama(resumen_hex, resumen_lib, info, pregunta)
 
     st.markdown("### 🧾 Interpretación")
-    if pregunta:
-        st.write(f'Aquí tienes la interpretación del oráculo I Ching a tu pregunta: "{pregunta}"')
     st.write(resultado)
