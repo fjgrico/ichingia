@@ -1,11 +1,11 @@
 import streamlit as st
 import random
 import os
-import openai
+from openai import OpenAI
 from hexagramas_data import HEXAGRAMAS_INFO
 
-# Configuración API
-openai.api_key = st.secrets["OPENAI_API_KEY"]
+# Cliente OpenAI moderno
+client = OpenAI()
 
 HEXAGRAMAS_TXT_DIR = "hexagramas_txt"
 LIBROS_TXT_DIR = "libros_txt"
@@ -62,7 +62,7 @@ BASE ADICIONAL:
 
 INTERPRETACIÓN:
 """
-    response = openai.ChatCompletion.create(
+    response = client.chat.completions.create(
         model="gpt-4",
         messages=[{"role": "user", "content": prompt}],
         temperature=0.7,
@@ -79,7 +79,7 @@ if "manual_lineas" not in st.session_state:
 if "lineas_activas" not in st.session_state:
     st.session_state.lineas_activas = []
 
-modo = st.radio("Elige el modo de tirada:", ["Tirada Automática", "Tirada Manual"])
+modo = st.selectbox("Elige el modo de tirada:", ["Tirada Automática", "Tirada Manual"], key="modo_tirada")
 lineas = []
 
 if modo == "Tirada Automática":
