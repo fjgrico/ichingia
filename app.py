@@ -1,27 +1,26 @@
-# Versión final garantizando visibilidad constante de los botones
-codigo_final_corregido = '''
 import streamlit as st
 import random
 import os
 import openai
 from hexagramas_data import HEXAGRAMAS_INFO
 
-# Configurar clave API desde secrets
+# Configuración API
 openai.api_key = st.secrets["OPENAI_API_KEY"]
 
 HEXAGRAMAS_TXT_DIR = "hexagramas_txt"
 LIBROS_TXT_DIR = "libros_txt"
+IMG_DIR = "img_hexagramas"
 
 def lanzar_linea():
     resultado = random.randint(6, 9)
     if resultado == 6:
-        return "⚋", True  # yin mutante
+        return "⚋", True
     elif resultado == 7:
-        return "⚊", False  # yang
+        return "⚊", False
     elif resultado == 8:
-        return "⚋", False  # yin
+        return "⚋", False
     elif resultado == 9:
-        return "⚊", True  # yang mutante
+        return "⚊", True
 
 def obtener_hexagrama_por_lineas(lineas):
     binario = ''.join(['1' if l[0] == "⚊" else '0' for l in lineas])
@@ -30,11 +29,8 @@ def obtener_hexagrama_por_lineas(lineas):
 def obtener_hexagrama_mutado(lineas):
     mutadas = []
     for simbolo, mutante in lineas:
-        if mutante:
-            nuevo = "⚊" if simbolo == "⚋" else "⚋"
-            mutadas.append((nuevo, False))
-        else:
-            mutadas.append((simbolo, False))
+        nuevo = "⚊" if simbolo == "⚋" else "⚋" if mutante else simbolo
+        mutadas.append((nuevo, False))
     return obtener_hexagrama_por_lineas(mutadas)
 
 def cargar_texto_hexagrama(num):
@@ -50,7 +46,7 @@ def cargar_texto_libros():
         if f.endswith(".txt"):
             with open(os.path.join(LIBROS_TXT_DIR, f), "r", encoding="utf-8") as file:
                 textos.append(file.read())
-    return "\\n\\n".join(textos[:3])
+    return "\n\n".join(textos[:3])
 
 def interpretar_hexagrama(texto_hex, texto_libros, info_hexagrama):
     prompt = f"""
@@ -78,18 +74,14 @@ INTERPRETACIÓN:
 st.set_page_config(page_title="I Ching IA", layout="centered")
 st.title("🔮 I Ching IA - Interpretación de Hexagramas")
 
-# Inicializar estados
 if "manual_lineas" not in st.session_state:
     st.session_state.manual_lineas = []
 if "lineas_activas" not in st.session_state:
     st.session_state.lineas_activas = []
 
-# Selección de modo
 modo = st.radio("Elige el modo de tirada:", ["Tirada Automática", "Tirada Manual"])
-
 lineas = []
 
-# Mostrar botones siempre
 if modo == "Tirada Automática":
     if st.button("🎲 Realizar tirada automática"):
         lineas = [lanzar_linea() for _ in range(6)]
@@ -110,22 +102,22 @@ elif modo == "Tirada Manual":
     lineas = st.session_state.manual_lineas
     st.session_state.lineas_activas = lineas
 
-# Mostrar líneas si existen
 if len(lineas) > 0:
     st.markdown("### Líneas del hexagrama (de abajo hacia arriba):")
     for idx, (simbolo, mutante) in enumerate(lineas[::-1]):
         st.write(f"Línea {6-idx}: {simbolo} {'(mutante)' if mutante else ''}")
 
-# Interpretar si hay 6 líneas
 if len(lineas) == 6:
     num_hex = obtener_hexagrama_por_lineas(lineas)
     info = HEXAGRAMAS_INFO.get(num_hex, {"Nombre": "Desconocido", "Caracter": "?", "Pinyin": "?"})
     st.markdown(f"## 🔵 Hexagrama {num_hex}: {info['Nombre']} ({info['Caracter']} – {info['Pinyin']})")
+    st.image(f"{IMG_DIR}/{num_hex:02d}.png", width=200)
 
     if any(mut for _, mut in lineas):
         num_mutado = obtener_hexagrama_mutado(lineas)
         info_mutado = HEXAGRAMAS_INFO.get(num_mutado, {"Nombre": "Desconocido", "Caracter": "?", "Pinyin": "?"})
         st.markdown(f"## 🟠 Hexagrama Mutado {num_mutado}: {info_mutado['Nombre']} ({info_mutado['Caracter']} – {info_mutado['Pinyin']})")
+        st.image(f"{IMG_DIR}/{num_mutado:02d}.png", width=200)
 
     with st.spinner("🧠 Interpretando con GPT..."):
         texto_hex = cargar_texto_hexagrama(num_hex)
@@ -134,11 +126,3 @@ if len(lineas) == 6:
 
     st.markdown("### 🧾 Interpretación")
     st.write(interpretacion)
-'''
-
-# Guardar versión final corregida garantizada
-ruta_final_bien = "/mnt/data/app_iching_OK_final.py"
-with open(ruta_final_bien, "w", encoding="utf-8") as f:
-    f.write(codigo_final_corregido.strip())
-
-ruta_final_bien
