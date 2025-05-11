@@ -23,25 +23,29 @@ HEXAGRAMAS_TXT_DIR = BASE_DIR / "hexagramas_txt"
 LIBROS_TXT_DIR     = BASE_DIR / "libros_txt"
 IMG_DIR            = BASE_DIR / "img_hexagramas"
 
-# ——— Lógica de tirada de líneas ———
+# ——— Lógica de tirada de líneas con monedas ———
 def lanzar_linea():
-    resultado = random.randint(6, 9)
-    simbolo = "⚊" if resultado in (7, 9) else "⚋"
-    mutante = resultado in (6, 9)
-    return simbolo, mutante
+    # Simular 3 monedas: 2 puntos (yin) o 3 puntos (yang)
+    monedas = [random.choice([2, 3]) for _ in range(3)]
+    valor   = sum(monedas)
+    # Línea yang (⚊) si impar (7,9), línea yin (⚋) si par (6,8)
+    simbolo = "⚊" if valor in (7, 9) else "⚋"
+    # Mutable si 'gran yin' (6) o 'gran yang' (9)
+    mutante = valor in (6, 9)
+    return simbolo, mutante, valor, monedas
 
 def obtener_hexagrama_por_lineas(lineas):
-    binario = "".join("1" if s == "⚊" else "0" for s, _ in lineas)
+    binario = "".join("1" if s == "⚊" else "0" for s, *_ in lineas)
     return int(binario, 2) + 1
 
 def obtener_hexagrama_mutado(lineas):
     mutadas = []
-    for s, mut in lineas:
+    for s, mut, *_ in lineas:
         if mut:
             nuevo = "⚋" if s == "⚊" else "⚊"
         else:
             nuevo = s
-        mutadas.append((nuevo, False))
+        mutadas.append((nuevo, False, None, None))
     return obtener_hexagrama_por_lineas(mutadas)
 
 # ——— Carga de textos ———
@@ -61,7 +65,6 @@ def cargar_texto_libros():
 
 # ——— Iconos visuales ———
 def iconos_linea(simbolo):
-    # Línea continua (⚊): ⚫ ⚫ ⚫  /  Línea discontinua (⚋): ⚫ ⚪ ⚫
     return "⚫ ⚫ ⚫" if simbolo == "⚊" else "⚫ ⚪ ⚫"
 
 # ——— Interpretación con GPT ———
@@ -129,23 +132,27 @@ elif modo == "Tirada Manual":
     lineas = st.session_state.manual_lineas
     st.session_state.lineas_activas = lineas
 
-# Mostrar líneas con iconos y mutante al final
+# ——— Mostrar líneas con valor, monedas, iconos y mutante al final ———
 if len(lineas) > 0:
     st.markdown("### Líneas del hexagrama (de abajo hacia arriba):")
-    for i, (simb, mut) in enumerate(lineas[::-1]):
+    for i, (simb, mut, valor, monedas) in enumerate(lineas[::-1]):
         linea_num = 6 - i
         iconos    = iconos_linea(simb)
         mut_text  = " (mutante)" if mut else ""
-        st.write(f"**Línea {linea_num}:** {simb} {iconos}{mut_text}")
+        st.write(
+            f"**Línea {linea_num}:** {simb}  "
+            f"Valor={valor} (monedas={monedas})  "
+            f"{iconos}{mut_text}"
+        )
 
-# Cuando hay 6 líneas, enseña el hexagrama y la interpretación
+# ——— Mostrar hexagramas e interpretación cuando hay 6 líneas ———
 if len(lineas) == 6:
     num_hex = obtener_hexagrama_por_lineas(lineas)
     info    = HEXAGRAMAS_INFO.get(num_hex, {"Nombre":"Desconocido","Caracter":"?","Pinyin":"?"})
     st.markdown(f"## 🔵 Hexagrama {num_hex}: {info['Nombre']} ({info['Caracter']} – {info['Pinyin']})")
     st.image(str(IMG_DIR / f"{num_hex:02d}.png"), width=150)
 
-    if any(mut for _, mut in lineas):
+    if any(mut for _, mut, *_ in lineas):
         num_mut = obtener_hexagrama_mutado(lineas)
         info_m  = HEXAGRAMAS_INFO.get(num_mut, {"Nombre":"Desconocido","Caracter":"?","Pinyin":"?"})
         st.markdown(f"## 🟠 Hexagrama Mutado {num_mut}: {info_m['Nombre']} ({info_m['Caracter']} – {info_m['Pinyin']})")
