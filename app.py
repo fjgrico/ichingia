@@ -44,14 +44,14 @@ def lanzar_linea():
     return simbolo, mutante, valor, monedas
 
 def obtener_hexagrama_por_lineas(lineas):
-    binario = "".join("1" if s=="⚊" else "0" for s, *_ in lineas)
-    return int(binario,2) + 1
+    binario = "".join("1" if s == "⚊" else "0" for s, *_ in lineas)
+    return int(binario, 2) + 1
 
 def obtener_hexagrama_mutado(lineas):
     mutadas = []
     for s, mut, *_ in lineas:
         if mut:
-            nuevo = "⚋" if s=="⚊" else "⚊"
+            nuevo = "⚋" if s == "⚊" else "⚊"
         else:
             nuevo = s
         mutadas.append((nuevo, False, None, None))
@@ -60,7 +60,8 @@ def obtener_hexagrama_mutado(lineas):
 # ——— Carga de textos ———
 def cargar_texto_hexagrama(num):
     for fname in os.listdir(HEXAGRAMAS_TXT_DIR):
-        if fname.lower().startswith(f"{num:02}") or fname.lower().startswith(f"hexagrama_{num}"):
+        lower = fname.lower()
+        if lower.startswith(f"{num:02}") or lower.startswith(f"hexagrama_{num}"):
             return (HEXAGRAMAS_TXT_DIR / fname).read_text(encoding="utf-8")
     return "Texto no disponible."
 
@@ -72,22 +73,45 @@ def cargar_texto_libros():
 
 # ——— Iconos visuales ———
 def iconos_linea(simbolo):
-    return "⚫ ⚫ ⚫" if simbolo=="⚊" else "⚫ ⚪ ⚫"
+    return "⚫ ⚫ ⚫" if simbolo == "⚊" else "⚫ ⚪ ⚫"
 
-# ——— Llamada de resumen ———
+# ——— Resumir texto por chunks ———
 def resumir_texto(texto, etiqueta):
-    prompt = f"Por favor, resume brevemente (300–400 tokens) el siguiente texto del {etiqueta} para su posterior interpretación:\n\n\"\"\"\n{texto}\n\"\"\"\nResumen:"
-    try:
+    MAX_CHARS = 3000      # caracteres por fragmento
+    MAX_TOKENS_SUM = 400  # tokens de salida por fragmento
+
+    # 1) Dividir en trozos
+    chunks = [texto[i : i + MAX_CHARS] for i in range(0, len(texto), MAX_CHARS)]
+    sumarios = []
+
+    for idx, chunk in enumerate(chunks, start=1):
+        prompt = (
+            f"Fragmento {idx}/{len(chunks)} del {etiqueta}. "
+            "Resume brevemente (250–350 tokens) lo esencial de este fragmento:\n\n"
+            f"\"\"\"\n{chunk}\n\"\"\"\n\nResumen {idx}:"
+        )
         resp = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[{"role":"user","content":prompt}],
             temperature=0.5,
-            max_tokens=400
+            max_tokens=MAX_TOKENS_SUM
         )
-        return resp.choices[0].message.content
-    except OpenAIError as e:
-        st.error(f"🚨 Error al resumir {etiqueta}: {e}")
-        st.stop()
+        sumarios.append(resp.choices[0].message.content)
+
+    # 2) Combinar los resúmenes parciales en uno final
+    combinado = "\n\n".join(sumarios)
+    prompt_final = (
+        f"Estos son los resúmenes parciales del {etiqueta}. "
+        "Únelos en un solo resumen coherente (300–400 tokens):\n\n"
+        f"{combinado}\n\nResumen final:"
+    )
+    resp2 = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role":"user","content":prompt_final}],
+        temperature=0.5,
+        max_tokens=450
+    )
+    return resp2.choices[0].message.content
 
 # ——— Interpretación final ———
 def interpretar_hexagrama(res_hex, res_lib, info_hex, pregunta_usuario):
@@ -137,7 +161,7 @@ st.markdown("---")
 modo = st.selectbox("Elige modo de tirada:", ["Automática", "Manual"], key="modo")
 lineas = []
 
-if modo=="Automática":
+if modo == "Automática":
     if st.button("🎲 Realizar tirada"):
         lineas = [lanzar_linea() for _ in range(6)]
         st.session_state.lineas_activas = lineas
@@ -165,18 +189,18 @@ if lineas:
         mut_text = " (mutante)" if mut else ""
         st.write(f"**Línea {num}:** {simb}  Valor={valor}  Monedas={monedas}  {iconos}{mut_text}")
 
-# ——— Al tener 6 líneas, procedemos ———
-if len(lineas)==6:
+# ——— Cuando hay 6 líneas, proceder ———
+if len(lineas) == 6:
     num_hex = obtener_hexagrama_por_lineas(lineas)
     info    = HEXAGRAMAS_INFO.get(num_hex, {"Nombre":"Desconocido","Caracter":"?","Pinyin":"?"})
     st.markdown(f"## 🔵 Hexagrama {num_hex}: {info['Nombre']} ({info['Caracter']} – {info['Pinyin']})")
-    st.image(str(IMG_DIR/f"{num_hex:02d}.png"), width=150)
+    st.image(str(IMG_DIR / f"{num_hex:02d}.png"), width=150)
 
-    if any(mut for _,mut,*_ in lineas):
+    if any(mut for _, mut, *_ in lineas):
         num_mut = obtener_hexagrama_mutado(lineas)
         info_m  = HEXAGRAMAS_INFO.get(num_mut, {"Nombre":"Desconocido","Caracter":"?","Pinyin":"?"})
         st.markdown(f"## 🟠 Hexagrama Mutado {num_mut}: {info_m['Nombre']} ({info_m['Caracter']} – {info_m['Pinyin']})")
-        st.image(str(IMG_DIR/f"{num_mut:02d}.png"), width=150)
+        st.image(str(IMG_DIR / f"{num_mut:02d}.png"), width=150)
 
     # ── Resumir ──
     with st.spinner("📝 Resumiendo textos..."):
