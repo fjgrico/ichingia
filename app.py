@@ -85,7 +85,7 @@ INTERPRETACIÓN:
 """
     try:
         resp = client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
             max_tokens=1200
@@ -129,14 +129,14 @@ elif modo == "Tirada Manual":
     lineas = st.session_state.manual_lineas
     st.session_state.lineas_activas = lineas
 
-# Mostrar líneas con iconos
+# Mostrar líneas con iconos y mutante al final
 if len(lineas) > 0:
     st.markdown("### Líneas del hexagrama (de abajo hacia arriba):")
     for i, (simb, mut) in enumerate(lineas[::-1]):
         linea_num = 6 - i
-        iconos = iconos_linea(simb)
-        mut_text = " (mutante)" if mut else ""
-        st.write(f"**Línea {linea_num}:** {simb}{mut_text}   {iconos}")
+        iconos    = iconos_linea(simb)
+        mut_text  = " (mutante)" if mut else ""
+        st.write(f"**Línea {linea_num}:** {simb} {iconos}{mut_text}")
 
 # Cuando hay 6 líneas, enseña el hexagrama y la interpretación
 if len(lineas) == 6:
@@ -152,8 +152,8 @@ if len(lineas) == 6:
         st.image(str(IMG_DIR / f"{num_mut:02d}.png"), width=150)
 
     with st.spinner("🧠 Interpretando con GPT..."):
-        txt_hex     = cargar_texto_hexagrama(num_hex)
-        txt_libros  = cargar_texto_libros()
+        txt_hex       = cargar_texto_hexagrama(num_hex)
+        txt_libros    = cargar_texto_libros()
         interpretacion = interpretar_hexagrama(txt_hex, txt_libros, info)
 
     st.markdown("### 🧾 Interpretación")
