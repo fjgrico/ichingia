@@ -17,6 +17,12 @@ if not api_key:
     st.stop()
 client = OpenAI(api_key=api_key)
 
+# ——— Cache para resúmenes ———
+if "summary_others" not in st.session_state:
+    st.session_state.summary_others = None
+if "resumen_hex" not in st.session_state:
+    st.session_state.resumen_hex = {}
+
 # ——— Rutas ———
 BASE_DIR            = Path(__file__).parent
 HEXAGRAMAS_TXT_DIR  = BASE_DIR / "hexagramas_txt"
@@ -57,8 +63,7 @@ def obtener_hexagrama_mutado(lineas):
 # ——— Carga de texto del hexagrama ———
 def cargar_texto_hexagrama(num):
     for fname in os.listdir(HEXAGRAMAS_TXT_DIR):
-        lower = fname.lower()
-        if lower.startswith(f"{num:02}") or lower.startswith(f"hexagrama_{num}"):
+        if fname.lower().startswith(f"{num:02}") or fname.lower().startswith(f"hexagrama_{num}"):
             return (HEXAGRAMAS_TXT_DIR / fname).read_text(encoding="utf-8")
     return ""
 
@@ -214,15 +219,18 @@ if len(lineas) == 6:
             txt = (LIBROS_TXT_DIR / fname).read_text(encoding="utf-8")
             base_texts.append(f"--- {fname} ---\n{txt}")
     others = [f for f in all_books if f not in BASE_BOOKS]
-    others_text = "\n\n".join((LIBROS_TXT_DIR / f).read_text(encoding="utf-8") for f in others)
-    summary_others = resumir_texto(others_text, "resto de bibliografía")
-    res_lib = "\n\n".join(base_texts)
-    res_lib += "\n\n--- Resumen del resto de la bibliografía ---\n" + summary_others
+    if st.session_state.summary_others is None:
+        others_text = "\n\n".join((LIBROS_TXT_DIR / f).read_text(encoding="utf-8") for f in others)
+        st.session_state.summary_others = resumir_texto(others_text, "resto de bibliografía")
+    summary_others = st.session_state.summary_others
+    res_lib = "\n\n".join(base_texts) + "\n\n--- Resumen del resto de la bibliografía ---\n" + summary_others
 
     # ── Resumir hexagrama ──
-    with st.spinner("📝 Resumiendo hexagrama..."):
-        txt_hex      = cargar_texto_hexagrama(num_hex)
-        resumen_hex  = resumir_texto(txt_hex, f"Hexagrama {num_hex}")
+    key = f"hex_{num_hex}"
+    if key not in st.session_state.resumen_hex:
+        txt_hex     = cargar_texto_hexagrama(num_hex)
+        st.session_state.resumen_hex[key] = resumir_texto(txt_hex, f"Hexagrama {num_hex}")
+    resumen_hex = st.session_state.resumen_hex[key]
 
     # ── Interpretar oráculo ──
     with st.spinner("🧠 Interpretando oráculo..."):
