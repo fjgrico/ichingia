@@ -1,6 +1,5 @@
 import os
 import random
-import json
 from pathlib import Path
 
 import streamlit as st
@@ -18,22 +17,42 @@ if not api_key:
     st.stop()
 client = OpenAI(api_key=api_key)
 
-# ——— Paths y cache ———
+# ——— Paths ———
 BASE_DIR            = Path(__file__).parent
 HEX_DIR             = BASE_DIR / "hexagramas_txt"
 LIB_DIR             = BASE_DIR / "libros_txt"
 IMG_DIR             = BASE_DIR / "img_hexagramas"
-CACHE_DIR           = BASE_DIR / ".cache"
-CACHE_FILE          = CACHE_DIR / "summaries.json"
 MANUAL_SUMMARY_FILE = BASE_DIR / "resto_summary.txt"
 
-os.makedirs(CACHE_DIR, exist_ok=True)
+# ——— Carga de resumen manual de bibliografía ———
+if MANUAL_SUMMARY_FILE.exists():
+    summary_others = MANUAL_SUMMARY_FILE.read_text(encoding="utf-8")
+else:
+    st.error("❌ Falta resto_summary.txt en la raíz del proyecto.")
+    st.stop()
+# Guarda en sesión para evitar relecturas
+st.session_state.summary_others = summary_others
 
-# ——— Función para resumir textos en chunks ———
+# ——— Inicializa cache de resúmenes de hexagramas ———
+if "resumen_hex" not in st.session_state:
+    st.session_state.resumen_hex = {}
+
+# ——— Mensaje de bienvenida ———
+st.title("🔮 I Ching IA - Consulta al Oráculo")
+st.markdown("""
+Bienvenido a **IChingIA**.  
+Aquí puedes **escribir** tu pregunta al oráculo antes de lanzar las monedas.  
+_Hazlo sólo si quieres enfocar tu tirada en algo concreto._  
+Si prefieres, puedes **dejar el campo vacío** y realizar directamente la tirada.
+""")
+
+# ——— Entrada de pregunta opcional ———
+pregunta = st.text_input("Escribe tu pregunta (opcional):")
+
+# ——— Función de resumen chunked (por hexagrama) ———
 def resumir_chunked(texto: str, etiqueta: str) -> str:
     MAX_CHARS = 3000
     MAX_TOKENS = 400
-    # Divide el texto en fragmentos
     chunks = [texto[i:i+MAX_CHARS] for i in range(0, len(texto), MAX_CHARS)]
     sumarios = []
     for idx, ch in enumerate(chunks, start=1):
@@ -49,7 +68,6 @@ def resumir_chunked(texto: str, etiqueta: str) -> str:
             max_tokens=MAX_TOKENS
         )
         sumarios.append(resp.choices[0].message.content)
-    # Combina y refina todos los resúmenes parciales
     combinado = "\n\n".join(sumarios)
     final_prompt = (
         f"Une estos resúmenes parciales de {etiqueta} en uno solo (300–400 tokens):\n\n"
@@ -63,60 +81,7 @@ def resumir_chunked(texto: str, etiqueta: str) -> str:
     )
     return resp2.choices[0].message.content
 
-# ——— Generar cache si no existe ———
-if not CACHE_FILE.exists():
-    with st.spinner("🔄 Generando cache de resúmenes (puede tardar varios minutos)…"):
-        # Carga textos de hexagramas y libros
-        hex_texts = {
-            f: (HEX_DIR / f).read_text(encoding="utf-8")
-            for f in os.listdir(HEX_DIR) if f.lower().endswith(".txt")
-        }
-        lib_texts = {
-            f: (LIB_DIR / f).read_text(encoding="utf-8")
-            for f in os.listdir(LIB_DIR) if f.lower().endswith(".txt")
-        }
-
-        # Define los 8 libros obligados
-        BASE_BOOKS = [
-            "8Virtues_Spanish.txt",
-            "I_Ching_El_libro_de_las_mutaciones_-_Richard_Wilhelm.txt",
-            "EL-SECRETO-de-la-FLOR-de-ORO_Raquel-Paricio_v2.txt",
-            "I_Ching_El_Libro_de_los_Cambios_-_James_Legge.txt",
-            "I_CHING_RICHARD_WILHELM_(COMPLETO_VERSIÓN_VOGELMANN).txt",
-            "I_CHING_Ritsema_Karcher_COMPLETO.txt",
-            "I_Ching_señales_de_Amor.Karcher.txt",
-            "Ricardo_Andreë_(extraïdo_de_su_libro__Tratado_I_Ching,_el_Canon_de_las_Mutaciones,_el_Séptimo._Tiempo)_TIEMPOS.txt"
-        ]
-
-        # Resumen de la bibliografía menos importante: manual o automático
-        if MANUAL_SUMMARY_FILE.exists():
-            summary_others = MANUAL_SUMMARY_FILE.read_text(encoding="utf-8")
-        else:
-            others = [t for t in lib_texts if t not in BASE_BOOKS]
-            resto_text = "\n\n".join(lib_texts[f] for f in others)
-            summary_others = resumir_chunked(resto_text, "resto de bibliografía")
-
-        # Resumen de cada hexagrama
-        resumen_hex = {}
-        for fname, txt in hex_texts.items():
-            num = int(''.join(filter(str.isdigit, fname)))
-            etiqueta = f"Hexagrama {num}"
-            resumen_hex[f"hex_{num}"] = resumir_chunked(txt, etiqueta)
-
-        # Guarda en disco
-        with open(CACHE_FILE, "w", encoding="utf-8") as f:
-            json.dump({
-                "summary_others": summary_others,
-                "resumen_hex": resumen_hex
-            }, f, ensure_ascii=False, indent=2)
-
-# ——— Carga cache en memoria ———
-with open(CACHE_FILE, "r", encoding="utf-8") as f:
-    disk_cache = json.load(f)
-st.session_state.summary_others = disk_cache["summary_others"]
-st.session_state.resumen_hex    = disk_cache["resumen_hex"]
-
-# ——— Funciones de tirada y UI ———
+# ——— Funciones de tirada y carga ———
 def lanzar_linea():
     monedas = [random.choice([2, 3]) for _ in range(3)]
     valor = sum(monedas)
@@ -145,6 +110,7 @@ def cargar_texto_hexagrama(num):
 def iconos_linea(simbolo):
     return "⚫ ⚫ ⚫" if simbolo == "⚊" else "⚫ ⚪ ⚫"
 
+# ——— Interpretación enriquecida ———
 def interpretar_hexagrama(res_hex, res_lib, info_hex, pregunta_usuario):
     intro = f'Aquí tienes la interpretación del oráculo I Ching a tu pregunta: "{pregunta_usuario}"\n\n' if pregunta_usuario else ""
     prompt = f"""{intro}
@@ -188,15 +154,14 @@ INTERPRETACIÓN COMPLETA:
         st.error(f"🚨 Error al llamar a OpenAI: {e}")
         st.stop()
 
-# Inicializa estado para tiradas
+# ——— Estado de la sesión para tiradas ———
 if "manual_lineas" not in st.session_state:
     st.session_state.manual_lineas = []
 if "lineas_activas" not in st.session_state:
     st.session_state.lineas_activas = []
 
-# Interfaz de usuario
-st.title("🔮 I Ching IA - Interpretación de Hexagramas")
-pregunta = st.text_input("Escribe tu pregunta (opcional):")
+# ——— UI de tirada ———
+st.markdown("---")
 modo = st.selectbox("Elige modo de tirada:", ["Automática", "Manual"], key="modo")
 lineas = []
 
@@ -219,6 +184,7 @@ else:
     lineas = st.session_state.manual_lineas
     st.session_state.lineas_activas = lineas
 
+# ——— Mostrar líneas ———
 if lineas:
     st.markdown("### Líneas (de abajo hacia arriba):")
     for i, (s, mut, val, mon) in enumerate(lineas[::-1]):
@@ -227,6 +193,7 @@ if lineas:
         mut_txt = " (mutante)" if mut else ""
         st.write(f"**Línea {num}:** {s}  Valor={val}  Monedas={mon}  {iconos}{mut_txt}")
 
+# ——— Mostrar hexagrama e interpretación ———
 if len(lineas) == 6:
     num_hex = obtener_hexagrama_por_lineas(lineas)
     info    = {**HEXAGRAMAS_INFO.get(num_hex, {}), "Numero": num_hex}
@@ -237,11 +204,15 @@ if len(lineas) == 6:
         num_mut  = obtener_hexagrama_mutado(lineas)
         info_mut = HEXAGRAMAS_INFO.get(num_mut, {})
         st.markdown(f"## 🟠 Hexagrama Mutado {num_mut}: {info_mut['Nombre']} ({info_mut['Caracter']} – {info_mut['Pinyin']})")
-        st.image(str(IMG_DIR / f"{num_mut:02d}.png"), width=150) 
+        st.image(str(IMG_DIR / f"{num_mut:02d}.png"), width=150)
 
-    # Carga resúmenes pre-generados
+    # Carga resumen manual y resumen on-demand de hexagrama
     res_lib     = st.session_state.summary_others
-    resumen_hex = st.session_state.resumen_hex[f"hex_{num_hex}"]
+    key         = f"hex_{num_hex}"
+    if key not in st.session_state.resumen_hex:
+        txt_hex = cargar_texto_hexagrama(num_hex)
+        st.session_state.resumen_hex[key] = resumir_chunked(txt_hex, f"Hexagrama {num_hex}")
+    resumen_hex = st.session_state.resumen_hex[key]
 
     # Interpretación
     with st.spinner("🧠 Interpretando oráculo..."):
